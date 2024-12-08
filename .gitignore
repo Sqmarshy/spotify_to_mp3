@@ -1,0 +1,55 @@
+# Virtual environment
+venv/
+.env
+
+# Byte-compiled files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# Logs
+*.log
+logs/
+
+# Output files
+output/
+*.csv
+*.txt
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+
+# Test coverage reports
+htmlcov/
+.coverage
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+
+# PyInstaller
+*.spec
+
+# Python packaging
+*.egg
+.eggs/
+
+# Docker
+*.env.*.local
+
+# Pyre
+.pyre/
+
+# Mypy
+.mypy_cache/
