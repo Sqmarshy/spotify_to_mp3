@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Track Results - Spotify to MP3</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        :root {
+            --spotify-green: #1DB954;
+            --spotify-black: #0a0a0a;
+            --spotify-dark-gray: #1a1a1a;
+            --spotify-light-gray: #2d2d2d;
+            --spotify-text: #FFFFFF;
+            --youtube-red: #FF0000;
+        }
+        
+        body {
+            background-color: var(--spotify-black);
+            color: var(--spotify-text);
+            font-family: 'Montserrat', 'Helvetica Neue', Arial, sans-serif;
+        }
+        
+        .spotify-green {
+            color: var(--spotify-green);
+        }
+        
+        .youtube-red {
+            color: var(--youtube-red);
+        }
+        
+        .card {
+            background-color: var(--spotify-dark-gray);
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+            border: none;
+        }
+        
+        .btn-spotify {
+            background-color: var(--spotify-green);
+            color: white;
+            border-radius: 30px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            padding: 8px 20px;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-spotify:hover, .btn-spotify:focus {
+            background-color: #1ed760;
+            color: white;
+            transform: scale(1.05);
+        }
+        
+        .btn-youtube {
+            background-color: var(--youtube-red);
+            color: white;
+            border-radius: 30px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-youtube:hover, .btn-youtube:focus {
+            background-color: #cc0000;
+            color: white;
+        }
+        
+        .track-item {
+            background-color: #1a1a1a;
+            border: 1px solid #333333;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            margin-bottom: 10px;
+        }
+        
+        .track-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            border-color: var(--spotify-green);
+        }
+        
+        .form-check-input {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            border: 2px solid #444;
+        }
+        
+        .form-check-input:checked {
+            background-color: var(--spotify-green);
+            border-color: var(--spotify-green);
+        }
+        
+        .footer {
+            padding: 2rem 0;
+            background-color: rgba(0, 0, 0, 0.3);
+            margin-top: 3rem;
+        }
+        
+        .page-header {
+            padding: 2rem 0;
+            background: linear-gradient(to right, var(--spotify-black), var(--spotify-dark-gray));
+            margin-bottom: 2rem;
+            border-radius: 0 0 10px 10px;
+        }
+        
+        .match-quality {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .match-good {
+            background-color: var(--spotify-green);
+            color: #000;
+        }
+        
+        .match-partial {
+            background-color: #FFA500;
+            color: #000;
+        }
+        
+        .match-poor {
+            background-color: #FF4500;
+            color: #fff;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .track-actions {
+                margin-top: 1rem;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            
+            .page-header {
+                padding: 1.5rem 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: rgba(0, 0, 0, 0.5);">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
+                <i class="fab fa-spotify me-2 spotify-green" style="font-size: 1.5rem;"></i>
+                <span>Spotify2MP3</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('list_downloads') }}">Downloads</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h1><span class="spotify-green">Spotify</span> to <span class="youtube-red">YouTube</span></h1>
+                    <p class="lead mb-0">Select tracks to download or create a playlist</p>
+                    {% if playlist_name %}
+                    <p class="fs-5 mt-2">Playlist: {{ playlist_name }}</p>
+                    {% endif %}
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <span class="badge bg-secondary fs-6">{{ results|length }} tracks found</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Action Buttons -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-body text-center p-4">
+                        <i class="fas fa-download spotify-green mb-3" style="font-size: 2rem;"></i>
+                        <h5 class="card-title">Download as MP3</h5>
+                        <p class="card-text">Download selected tracks as high-quality MP3 files.</p>
+                        <button type="button" class="btn btn-spotify" onclick="submitDownloadForm()">
+                            <i class="fas fa-music me-2"></i> Download Selected
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-body text-center p-4">
+                        <i class="fab fa-youtube youtube-red mb-3" style="font-size: 2rem;"></i>
+                        <h5 class="card-title">Create YouTube Playlist</h5>
+                        <p class="card-text">Create a YouTube playlist with the selected tracks.</p>
+                        <button type="button" class="btn btn-youtube" onclick="submitPlaylistForm()">
+                            <i class="fas fa-list me-2"></i> Create Playlist
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Card -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center" style="background-color: rgba(0,0,0,0.2);">
+                <h5 class="mb-0 text-white">YouTube Matches</h5>
+                <div>
+                    <button type="button" class="btn btn-sm btn-outline-light me-2" id="selectAll">Select All</button>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown">
+                            Filter
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="#" onclick="filterByMatchQuality('all')">All Matches</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="filterByMatchQuality('good')">Good Matches Only</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="filterByMatchQuality('partial')">Partial Matches & Better</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-body">
+                <form id="downloadForm" action="{{ url_for('download_tracks', session_id=session_id) }}" method="post">
+                    <form id="playlistForm" action="{{ url_for('create_yt_playlist', session_id=session_id) }}" method="post">
+                        <div class="tracks-container">
+                            {% for result in results %}
+                            <div class="track-item p-3 mb-3 match-quality-{{ result.match_quality }}">
+                                <div class="row align-items-center">
+                                    <!-- Checkbox column -->
+                                    <div class="col-md-1 col-2 text-center">
+                                        <input type="checkbox" class="form-check-input track-checkbox" name="download_tracks" value="{{ result.youtube_url }}">
+                                    </div>
+                                    
+                                    <!-- Track info column -->
+                                    <div class="col-md-9 col-10">
+                                        <div class="d-flex align-items-center mb-1">
+                                            <i class="fab fa-spotify spotify-green me-2"></i>
+                                            <div class="fw-bold fs-5 text-white">{{ result.spotify_track }}</div>
+                                            <span class="match-quality match-{{ result.match_quality }}">{{ result.match_quality|capitalize }}</span>
+                                        </div>
+                                        <div class="text-white mb-2">{{ result.spotify_artists }}</div>
+                                        
+                                        <div class="d-flex align-items-center">
+                                            <i class="fab fa-youtube youtube-red me-2"></i>
+                                            <div class="text-white-50">{{ result.youtube_title }}</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Action button column -->
+                                    <div class="col-md-2 track-actions text-md-end mt-md-0 mt-3">
+                                        <a href="{{ result.youtube_url }}" target="_blank" class="btn btn-sm btn-youtube">
+                                            <i class="fas fa-play me-1"></i> Preview
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </form>
+                </form>
+                
+                <!-- Hidden form for playlist creation -->
+                <form id="playlistForm" action="{{ url_for('create_yt_playlist', session_id=session_id) }}" method="post" style="display: none;">
+                    <input type="text" name="playlist_name" value="{{ playlist_name|default('My Spotify Playlist') }}">
+                    {% for result in results %}
+                    <input type="checkbox" class="playlist-track-checkbox" name="playlist_tracks" value="{{ result.youtube_url }}">
+                    {% endfor %}
+                </form>
+            </div>
+        </div>
+        
+        <!-- Back button -->
+        <div class="text-center mb-5">
+            <a href="{{ url_for('index') }}" class="btn btn-outline-light">
+                <i class="fas fa-arrow-left me-2"></i> Back to Home
+            </a>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer mt-auto">
+        <div class="container text-center">
+            <p class="text-muted mb-0">© 2025 Spotify2MP3 Converter - For personal use only</p>
+            <p class="text-muted small">This tool is not affiliated with Spotify or YouTube.</p>
+        </div>
+    </footer>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Page Scripts -->
+    <script>
+        // Select All functionality
+        document.getElementById('selectAll').addEventListener('click', function() {
+            const checkboxes = document.querySelectorAll('.track-checkbox');
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = !allChecked;
+            });
+            
+            this.textContent = allChecked ? 'Select All' : 'Deselect All';
+        });
+        
+        // Filter by match quality
+        function filterByMatchQuality(quality) {
+            const items = document.querySelectorAll('.track-item');
+            
+            items.forEach(item => {
+                if (quality === 'all') {
+                    item.style.display = 'block';
+                } else if (quality === 'good' && item.classList.contains('match-quality-good')) {
+                    item.style.display = 'block';
+                } else if (quality === 'partial' && (item.classList.contains('match-quality-good') || item.classList.contains('match-quality-partial'))) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+        
+        // Submit download form
+        function submitDownloadForm() {
+            const selectedTracks = document.querySelectorAll('.track-checkbox:checked');
+            
+            if (selectedTracks.length === 0) {
+                alert('Please select at least one track to download');
+                return;
+            }
+            
+            document.getElementById('downloadForm').submit();
+        }
+        
+        // Submit playlist form
+        function submitPlaylistForm() {
+            const selectedTracks = document.querySelectorAll('.track-checkbox:checked');
+            
+            if (selectedTracks.length === 0) {
+                alert('Please select at least one track for the playlist');
+                return;
+            }
+            
+            // Copy selections to the playlist form
+            const playlistCheckboxes = document.querySelectorAll('.playlist-track-checkbox');
+            
+            for (let i = 0; i < selectedTracks.length; i++) {
+                const index = Array.from(document.querySelectorAll('.track-checkbox')).indexOf(selectedTracks[i]);
+                if (index >= 0 && index < playlistCheckboxes.length) {
+                    playlistCheckboxes[index].checked = true;
+                }
+            }
+            
+            document.getElementById('playlistForm').submit();
+        }
+    </script>
+</body>
+</html>
