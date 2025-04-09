@@ -258,17 +258,56 @@ def create_yt_playlist(session_id):
             video_id = url.split("v=")[1].split("&")[0]
             video_ids.append(video_id)
     
-    # Call function to create playlist (this would need YouTube OAuth)
+    # Call function to create playlist with OAuth
     result = create_youtube_playlist(video_ids, playlist_name)
     
     if result['success']:
         flash(f'Successfully created YouTube playlist: {playlist_name}', 'success')
         # Store playlist info in session
         sessions[session_id]['youtube_playlist'] = result
+        return redirect(url_for('youtube_playlist_success', session_id=session_id))
+    elif result.get('setup_required'):
+        # OAuth setup is required
+        flash('YouTube OAuth setup required. Please follow the instructions.', 'warning')
+        return redirect(url_for('youtube_auth_setup', session_id=session_id))
     else:
-        flash('Failed to create YouTube playlist', 'error')
+        flash(f'Failed to create YouTube playlist: {result.get("error", "Unknown error")}', 'error')
+        return redirect(url_for('search_youtube', session_id=session_id))
+
+@app.route('/youtube_auth_setup/<session_id>')
+def youtube_auth_setup(session_id):
+    """Show instructions for setting up YouTube OAuth"""
+    if session_id not in sessions:
+        flash('Session expired or not found', 'error')
+        return redirect(url_for('index'))
     
-    return redirect(url_for('search_youtube', session_id=session_id))
+    return render_template('youtube_auth_setup.html', session_id=session_id)
+
+@app.route('/youtube_auth_callback')
+def youtube_auth_callback():
+    """Handle the OAuth callback from Google"""
+    # This route will be called after user authorizes the application
+    # Extract the session_id from state parameter if you implemented it
+    session_id = request.args.get('state', '')
+    
+    if session_id and session_id in sessions:
+        flash('YouTube authorization successful. You can now create playlists.', 'success')
+        return redirect(url_for('search_youtube', session_id=session_id))
+    else:
+        flash('YouTube authorization process completed, but session was lost.', 'warning')
+        return redirect(url_for('index'))
+
+@app.route('/youtube_playlist_success/<session_id>')
+def youtube_playlist_success(session_id):
+    """Show success page after creating a YouTube playlist"""
+    if session_id not in sessions or 'youtube_playlist' not in sessions[session_id]:
+        flash('Session expired or playlist information not found', 'error')
+        return redirect(url_for('index'))
+    
+    playlist_info = sessions[session_id]['youtube_playlist']
+    return render_template('youtube_playlist_success.html', 
+                          playlist=playlist_info,
+                          session_id=session_id)
 
 @app.route('/clear_downloads', methods=['POST'])
 def clear_downloads():

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playlist Created - Spotify to MP3</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        :root {
+            --spotify-green: #1DB954;
+            --spotify-black: #191414;
+            --spotify-dark-gray: #282828;
+            --spotify-light-gray: #3E3E3E;
+            --spotify-text: #FFFFFF;
+            --youtube-red: #FF0000;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: rgba(0, 0, 0, 0.5);">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
+                <i class="fab fa-spotify me-2 spotify-green" style="font-size: 1.5rem;"></i>
+                <span>Spotify2MP3</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('list_downloads') }}">Downloads</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1><span class="youtube-red">YouTube</span> Playlist Created!</h1>
+                    <p class="lead mb-0">Your playlist has been successfully created and is ready to watch</p>
+                </div>
+                <div class="col-md-4 text-md-end">
+                    <span class="badge bg-success fs-6">
+                        <i class="fas fa-check-circle me-1"></i> Success
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <!-- Confetti Animation -->
+        <div class="confetti-container text-center">
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            <div class="confetti"></div>
+            
+            <div class="position-absolute top-50 start-50 translate-middle">
+                <i class="fab fa-youtube success-icon"></i>
+            </div>
+        </div>
+
+        <!-- Success Card -->
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card success-card mb-4">
+                    <div class="card-body p-4">
+                        <div class="text-center mb-4">
+                            <h2 class="mb-3">Playlist Created Successfully!</h2>
+                            <p class="lead">Your tracks have been added to a new YouTube playlist.</p>
+                        </div>
+                        
+                        <div class="bg-dark p-4 rounded mb-4">
+                            <div class="row">
+                                <div class="col-md-3 text-md-end fw-bold">Playlist Name:</div>
+                                <div class="col-md-9">{{ playlist.playlist_name }}</div>
+                            </div>
+                            <hr class="my-2">
+                            <div class="row">
+                                <div class="col-md-3 text-md-end fw-bold">Video Count:</div>
+                                <div class="col-md-9">{{ playlist.video_count }} tracks</div>
+                            </div>
+                            <hr class="my-2">
+                            <div class="row">
+                                <div class="col-md-3 text-md-end fw-bold">Playlist ID:</div>
+                                <div class="col-md-9">{{ playlist.playlist_id }}</div>
+                            </div>
+                            <hr class="my-2">
+                            <div class="row">
+                                <div class="col-md-3 text-md-end fw-bold">Privacy Status:</div>
+                                <div class="col-md-9">Private</div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <a href="{{ playlist.playlist_url }}" target="_blank" class="btn btn-youtube">
+                                <i class="fab fa-youtube me-2"></i> Open YouTube Playlist
+                            </a>
+                        </div>
+                        
+                        <div class="alert alert-info mt-4">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Note:</strong> The playlist is set to private by default. You can change its privacy settings on YouTube.
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- What's Next Card -->
+                <div class="card mb-5">
+                    <div class="card-body text-center p-4">
+                        <h5 class="mb-3">What would you like to do next?</h5>
+                        <div class="row justify-content-center">
+                            <div class="col-md-4 mb-3">
+                                <a href="{{ url_for('index') }}" class="btn btn-outline-light w-100">
+                                    <i class="fas fa-plus-circle me-2"></i> Convert Another Playlist
+                                </a>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <a href="{{ url_for('search_youtube', session_id=session_id) }}" class="btn btn-outline-light w-100">
+                                    <i class="fas fa-arrow-left me-2"></i> Back to Results
+                                </a>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <a href="{{ url_for('list_downloads') }}" class="btn btn-outline-light w-100">
+                                    <i class="fas fa-download me-2"></i> View Downloads
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer mt-auto">
+        <div class="container text-center">
+            <p class="text-muted mb-0">© 2025 Spotify2MP3 Converter - For personal use only</p>
+            <p class="text-muted small">This tool is not affiliated with Spotify or YouTube.</p>
+        </div>
+    </footer>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+        
+        body {
+            background-color: var(--spotify-black);
+            color: var(--spotify-text);
+            font-family: 'Montserrat', 'Helvetica Neue', Arial, sans-serif;
+        }
+        
+        .spotify-green {
+            color: var(--spotify-green);
+        }
+        
+        .youtube-red {
+            color: var(--youtube-red);
+        }
+        
+        .card {
+            background-color: var(--spotify-dark-gray);
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+            border: none;
+        }
+        
+        .btn-spotify {
+            background-color: var(--spotify-green);
+            color: white;
+            border-radius: 30px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            padding: 10px 30px;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-spotify:hover, .btn-spotify:focus {
+            background-color: #1ed760;
+            color: white;
+            transform: scale(1.05);
+        }
+        
+        .btn-youtube {
+            background-color: var(--youtube-red);
+            color: white;
+            border-radius: 30px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            padding: 10px 30px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-youtube:hover, .btn-youtube:focus {
+            background-color: #cc0000;
+            color: white;
+            transform: scale(1.05);
+        }
+        
+        .footer {
+            padding: 2rem 0;
+            background-color: rgba(0, 0, 0, 0.3);
+            margin-top: 3rem;
+        }
+        
+        .page-header {
+            padding: 2rem 0;
+            background: linear-gradient(to right, var(--spotify-black), var(--spotify-dark-gray));
+            margin-bottom: 2rem;
+            border-radius: 0 0 10px 10px;
+        }
+        
+        .success-card {
+            border-left: 5px solid var(--youtube-red);
+            transition: all 0.3s ease;
+        }
+        
+        .success-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 25px rgba(0, 0, 0, 0.6);
+        }
+        
+        .success-icon {
+            font-size: 5rem;
+            color: var(--youtube-red);
+            animation: pulse 2s infinite;
+        }
+        
+        .confetti-container {
+            position: relative;
+            height: 200px;
+            margin-bottom: 2rem;
+        }
+        
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            opacity: 0.8;
+            animation: confetti-fall 3s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.1);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+        
+        @keyframes confetti-fall {
+            0% {
+                transform: translateY(0) rotate(0deg);
+                opacity: 0.8;
+            }
+            100% {
+                transform: translateY(200px) rotate(360deg);
+                opacity: 0;
+            }
+        }
+        
+        /* Generate multiple confetti elements with different colors and positions */
+        .confetti:nth-child(1) { left: 10%; animation-delay: 0s; background-color: var(--youtube-red); }
+        .confetti:nth-child(2) { left: 20%; animation-delay: 0.5s; background-color: var(--spotify-green); }
+        .confetti:nth-child(3) { left: 30%; animation-delay: 1s; background-color: #3ea6ff; }
+        .confetti:nth-child(4) { left: 40%; animation-delay: 1.5s; background-color: var(--youtube-red); }
+        .confetti:nth-child(5) { left: 50%; animation-delay: 0.7s; background-color: var(--spotify-green); }
+        .confetti:nth-child(6) { left: 60%; animation-delay: 1.2s; background-color: #3ea6ff; }
+        .confetti:nth-child(7) { left: 70%; animation-delay: 0.3s; background-color: var(--youtube-red); }
+        .confetti:nth-child(8) { left: 80%; animation-delay: 0.9s; background-color: var(--spotify-green); }
+        .confetti:nth-child(9) { left: 90%; animation-delay: 1.7s; background-color: #3ea6ff; }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .page-header {
+                padding: 1.5rem 0;
+            }
+            
+            .confetti-container {
+                height: 150px;
+            }
+        }

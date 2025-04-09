@@ -3,12 +3,14 @@ import tempfile
 import zipfile
 from io import BytesIO
 from yt_dlp import YoutubeDL
-
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.oauth2.credentials import Credentials
 import json
+
+# For YouTube OAuth2
+import pickle
+import google_auth_oauthlib.flow
+import googleapiclient.discovery
+import googleapiclient.errors
+from google.auth.transport.requests import Request
 
 def download_as_mp3(links, output_folder=None):
     """
@@ -82,37 +84,98 @@ def create_zip_from_mp3s(folder_path):
 
 SCOPES = ['https://www.googleapis.com/auth/youtube']
 
-def get_authenticated_service():
-    """Get an authenticated YouTube API service."""
+def get_youtube_credentials():
+    """
+    Gets OAuth2 credentials for YouTube API.
+    
+    Returns:
+        Credentials object for accessing YouTube API
+    """
+    # Location to store credentials
+    creds_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'credentials')
+    if not os.path.exists(creds_dir):
+        os.makedirs(creds_dir)
+        
+    token_path = os.path.join(creds_dir, 'youtube_token.pickle')
     credentials = None
     
-    # Look for saved credentials
-    if os.path.exists('token.json'):
-        credentials = Credentials.from_authorized_user_info(
-            json.loads(open('token.json').read()))
-    
-    # If no valid credentials, authenticate
+    # Check if token file exists
+    if os.path.exists(token_path):
+        with open(token_path, 'rb') as token:
+            try:
+                credentials = pickle.load(token)
+            except:
+                # If token loading fails, we'll recreate it
+                pass
+                
+    # If credentials are invalid or don't exist, refresh or create new ones
     if not credentials or not credentials.valid:
-        flow = InstalledAppFlow.from_client_secrets_file(
-            'client_secrets.json', SCOPES)
-        credentials = flow.run_local_server(port=8080)
-        
-        # Save credentials for next run
-        with open('token.json', 'w') as token:
-            token.write(credentials.to_json())
-    
-    return build('youtube', 'v3', credentials=credentials)
+        if credentials and credentials.expired and credentials.refresh_token:
+            try:
+                credentials.refresh(Request())
+            except:
+                # If refresh fails, we'll recreate the credentials
+                credentials = None
+                
+        # If we still don't have valid credentials, need to go through OAuth flow
+        if not credentials:
+            # Path to client secrets file from Google Developer Console
+            client_secrets_path = os.path.join(creds_dir, 'client_secrets.json')
+            
+            if not os.path.exists(client_secrets_path):
+                return None, {
+                    "success": False, 
+                    "error": "Missing client_secrets.json file. Please download it from Google Developer Console.",
+                    "setup_required": True
+                }
+                
+            # Create the flow using client secrets file and required scopes
+            flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
+                client_secrets_path,
+                ['https://www.googleapis.com/auth/youtube']
+            )
+            
+            # Get the credentials by running the OAuth flow
+            credentials = flow.run_local_server(port=0)
+            
+            # Save the credentials for next time
+            with open(token_path, 'wb') as token:
+                pickle.dump(credentials, token)
+                
+    return credentials, {"success": True}
 
 def create_youtube_playlist(video_ids, playlist_name, description=None):
+    """
+    Creates a YouTube playlist with the given videos.
+    Uses OAuth2 to authenticate with the YouTube API.
+    
+    Args:
+        video_ids (list): List of YouTube video IDs.
+        playlist_name (str): Name for the playlist.
+        description (str, optional): Description for the playlist.
+        
+    Returns:
+        dict: Result of creating the playlist.
+    """
+    # Get credentials
+    credentials, creds_result = get_youtube_credentials()
+    
+    if not creds_result["success"]:
+        return creds_result
+    
     try:
-        # Get authenticated service
-        youtube = get_authenticated_service()
-        playlist_response = youtube.playlists().insert(
+        # Build the YouTube API client
+        youtube = googleapiclient.discovery.build(
+            'youtube', 'v3', credentials=credentials, cache_discovery=False
+        )
+        
+        # Create the playlist
+        playlists_insert_response = youtube.playlists().insert(
             part="snippet,status",
             body={
                 "snippet": {
                     "title": playlist_name,
-                    "description": description or f"Playlist created from Spotify2MP3: {playlist_name}",
+                    "description": description or f"Playlist created from Spotify2MP3 for {playlist_name}",
                     "defaultLanguage": "en"
                 },
                 "status": {
@@ -121,49 +184,45 @@ def create_youtube_playlist(video_ids, playlist_name, description=None):
             }
         ).execute()
         
-        playlist_id = playlist_response["id"]
+        playlist_id = playlists_insert_response["id"]
         
         # Add videos to the playlist
-        videos_added = 0
-        failed_video_ids = []
-        
         for video_id in video_ids:
-            try:
-                youtube.playlistItems().insert(
-                    part="snippet",
-                    body={
-                        "snippet": {
-                            "playlistId": playlist_id,
-                            "resourceId": {
-                                "kind": "youtube#video",
-                                "videoId": video_id
-                            }
+            youtube.playlistItems().insert(
+                part="snippet",
+                body={
+                    "snippet": {
+                        "playlistId": playlist_id,
+                        "resourceId": {
+                            "kind": "youtube#video",
+                            "videoId": video_id
                         }
                     }
-                ).execute()
-                videos_added += 1
-            except HttpError as e:
-                failed_video_ids.append({"id": video_id, "error": str(e)})
+                }
+            ).execute()
         
-        # Return success result
+        # Get playlist URL
+        playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+        
         return {
             "success": True,
             "playlist_name": playlist_name,
             "playlist_id": playlist_id,
-            "video_count": videos_added,
-            "playlist_url": f"https://www.youtube.com/playlist?list={playlist_id}",
-            "failed_videos": failed_video_ids
+            "playlist_url": playlist_url,
+            "video_count": len(video_ids)
         }
         
-    except HttpError as e:
-        # Handle API errors
+    except googleapiclient.errors.HttpError as e:
+        error_content = json.loads(e.content)
+        error_message = error_content.get('error', {}).get('message', str(e))
         return {
             "success": False,
-            "error": f"An HTTP error occurred: {e.resp.status} {e.content}"
+            "error": f"YouTube API error: {error_message}",
+            "error_details": str(e)
         }
     except Exception as e:
-        # Handle any other exceptions
         return {
             "success": False,
-            "error": f"An error occurred: {str(e)}"
+            "error": f"An error occurred: {str(e)}",
+            "error_details": str(e)
         }
