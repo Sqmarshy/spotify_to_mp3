@@ -4,6 +4,12 @@ import zipfile
 from io import BytesIO
 from yt_dlp import YoutubeDL
 
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2.credentials import Credentials
+import json
+
 def download_as_mp3(links, output_folder=None):
     """
     Downloads YouTube links as MP3 files.
@@ -74,16 +80,90 @@ def create_zip_from_mp3s(folder_path):
     memory_file.seek(0)
     return memory_file
 
+SCOPES = ['https://www.googleapis.com/auth/youtube']
+
+def get_authenticated_service():
+    """Get an authenticated YouTube API service."""
+    credentials = None
+    
+    # Look for saved credentials
+    if os.path.exists('token.json'):
+        credentials = Credentials.from_authorized_user_info(
+            json.loads(open('token.json').read()))
+    
+    # If no valid credentials, authenticate
+    if not credentials or not credentials.valid:
+        flow = InstalledAppFlow.from_client_secrets_file(
+            'client_secrets.json', SCOPES)
+        credentials = flow.run_local_server(port=8080)
+        
+        # Save credentials for next run
+        with open('token.json', 'w') as token:
+            token.write(credentials.to_json())
+    
+    return build('youtube', 'v3', credentials=credentials)
+
 def create_youtube_playlist(video_ids, playlist_name, description=None):
-    """
-    Creates a YouTube playlist with the given videos.
-    This is a placeholder - you would need to implement YouTube OAuth flow.
-    """
-    # This would require YouTube API OAuth 
-    # Return a placeholder success response for now
-    return {
-        "success": True,
-        "playlist_name": playlist_name,
-        "video_count": len(video_ids),
-        "playlist_url": "https://www.youtube.com/playlist?list=EXAMPLE"
-    }
+    try:
+        # Get authenticated service
+        youtube = get_authenticated_service()
+        playlist_response = youtube.playlists().insert(
+            part="snippet,status",
+            body={
+                "snippet": {
+                    "title": playlist_name,
+                    "description": description or f"Playlist created from Spotify2MP3: {playlist_name}",
+                    "defaultLanguage": "en"
+                },
+                "status": {
+                    "privacyStatus": "private"  # Can be "public", "private", or "unlisted"
+                }
+            }
+        ).execute()
+        
+        playlist_id = playlist_response["id"]
+        
+        # Add videos to the playlist
+        videos_added = 0
+        failed_video_ids = []
+        
+        for video_id in video_ids:
+            try:
+                youtube.playlistItems().insert(
+                    part="snippet",
+                    body={
+                        "snippet": {
+                            "playlistId": playlist_id,
+                            "resourceId": {
+                                "kind": "youtube#video",
+                                "videoId": video_id
+                            }
+                        }
+                    }
+                ).execute()
+                videos_added += 1
+            except HttpError as e:
+                failed_video_ids.append({"id": video_id, "error": str(e)})
+        
+        # Return success result
+        return {
+            "success": True,
+            "playlist_name": playlist_name,
+            "playlist_id": playlist_id,
+            "video_count": videos_added,
+            "playlist_url": f"https://www.youtube.com/playlist?list={playlist_id}",
+            "failed_videos": failed_video_ids
+        }
+        
+    except HttpError as e:
+        # Handle API errors
+        return {
+            "success": False,
+            "error": f"An HTTP error occurred: {e.resp.status} {e.content}"
+        }
+    except Exception as e:
+        # Handle any other exceptions
+        return {
+            "success": False,
+            "error": f"An error occurred: {str(e)}"
+        }
