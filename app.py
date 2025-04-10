@@ -7,7 +7,7 @@ import uuid
 # Import functions from our other modules
 from spotify import process_spotify_playlist
 from youtube import search_tracks_on_youtube
-from download import download_as_mp3, create_zip_from_mp3s, create_youtube_playlist
+from download import download_as_mp3, create_zip_from_mp3s, create_youtube_playlist, get_youtube_credentials
 
 app = Flask(__name__, template_folder='templates')
 app.secret_key = "spotify_to_mp3_secret_key"
@@ -50,58 +50,68 @@ def process_playlist():
                           playlist=spotify_result['data']['playlist'],
                           session_id=session_id)
 
-@app.route('/search_youtube/<session_id>', methods=['POST'])
+@app.route('/search_youtube/<session_id>', methods=['POST', 'GET'])
 def search_youtube(session_id):
     """Search YouTube for selected Spotify tracks"""
     if session_id not in sessions:
         flash('Session expired or not found', 'error')
         return redirect(url_for('index'))
     
-    # Get selected track indices from form
-    selected_indices = request.form.getlist('selected_tracks')
+    # If it's a POST request, process the form data
+    if request.method == 'POST':
+        # Get selected track indices from form
+        selected_indices = request.form.getlist('selected_tracks')
+        
+        if not selected_indices:
+            flash('Please select at least one track to search', 'error')
+            return redirect(url_for('index'))
+        
+        # Convert indices to integers
+        selected_indices = [int(idx) for idx in selected_indices]
+        
+        # Get the tracks from session data
+        all_tracks = sessions[session_id]['spotify_tracks']
+        selected_tracks = [all_tracks[idx] for idx in selected_indices if idx < len(all_tracks)]
+        
+        # Search YouTube for matches
+        youtube_results = search_tracks_on_youtube(selected_tracks)
+        
+        if not youtube_results['success']:
+            flash('Failed to find YouTube matches for the selected tracks', 'error')
+            return redirect(url_for('index'))
+        
+        # Prepare results for the template
+        results = []
+        for item in youtube_results['results']:
+            track_data = item['spotify_data']
+            result = {
+                'spotify_track': track_data['title'],
+                'spotify_artists': track_data['artists_str'],
+                'spotify_query': track_data.get('search_query', f"{track_data['title']} - {track_data['artists_str']}"),
+                'youtube_title': item['youtube_title'],
+                'youtube_url': item['youtube_url'],
+                'youtube_id': item['youtube_id'],
+                'match_quality': item['match_quality']
+            }
+            results.append(result)
+        
+        # Update session with YouTube results
+        sessions[session_id]['youtube_results'] = results
+        sessions[session_id]['youtube_errors'] = youtube_results['errors']
     
-    if not selected_indices:
-        flash('Please select at least one track to search', 'error')
+    # For both GET and POST, render the results from session data
+    results = sessions[session_id].get('youtube_results', [])
+    
+    # If no results are available (for GET requests without prior POST)
+    if not results:
+        flash('No tracks have been searched yet', 'warning')
         return redirect(url_for('index'))
-    
-    # Convert indices to integers
-    selected_indices = [int(idx) for idx in selected_indices]
-    
-    # Get the tracks from session data
-    all_tracks = sessions[session_id]['spotify_tracks']
-    selected_tracks = [all_tracks[idx] for idx in selected_indices if idx < len(all_tracks)]
-    
-    # Search YouTube for matches
-    youtube_results = search_tracks_on_youtube(selected_tracks)
-    
-    if not youtube_results['success']:
-        flash('Failed to find YouTube matches for the selected tracks', 'error')
-        return redirect(url_for('index'))
-    
-    # Prepare results for the template
-    results = []
-    for item in youtube_results['results']:
-        track_data = item['spotify_data']
-        result = {
-            'spotify_track': track_data['title'],
-            'spotify_artists': track_data['artists_str'],
-            'spotify_query': track_data.get('search_query', f"{track_data['title']} - {track_data['artists_str']}"),
-            'youtube_title': item['youtube_title'],
-            'youtube_url': item['youtube_url'],
-            'youtube_id': item['youtube_id'],
-            'match_quality': item['match_quality']
-        }
-        results.append(result)
-    
-    # Update session with YouTube results
-    sessions[session_id]['youtube_results'] = results
-    sessions[session_id]['youtube_errors'] = youtube_results['errors']
     
     # Render the YouTube results template
     return render_template('results.html', 
                           results=results, 
                           session_id=session_id,
-                          playlist_name=sessions[session_id]['playlist_name'])
+                          playlist_name=sessions[session_id].get('playlist_name'))
 
 @app.route('/download/<session_id>', methods=['POST'])
 def download_tracks(session_id):
@@ -258,8 +268,12 @@ def create_yt_playlist(session_id):
             video_id = url.split("v=")[1].split("&")[0]
             video_ids.append(video_id)
     
-    # Call function to create playlist with OAuth
-    result = create_youtube_playlist(video_ids, playlist_name)
+    # Call function to create playlist with OAuth, passing the session data
+    result = create_youtube_playlist(
+        video_ids, 
+        playlist_name,
+        session_data=sessions[session_id]
+    )
     
     if result['success']:
         flash(f'Successfully created YouTube playlist: {playlist_name}', 'success')
@@ -268,7 +282,7 @@ def create_yt_playlist(session_id):
         return redirect(url_for('youtube_playlist_success', session_id=session_id))
     elif result.get('setup_required'):
         # OAuth setup is required
-        flash('YouTube OAuth setup required. Please follow the instructions.', 'warning')
+        flash('YouTube authorization required. Please complete the authorization process.', 'warning')
         return redirect(url_for('youtube_auth_setup', session_id=session_id))
     else:
         flash(f'Failed to create YouTube playlist: {result.get("error", "Unknown error")}', 'error')
@@ -276,12 +290,31 @@ def create_yt_playlist(session_id):
 
 @app.route('/youtube_auth_setup/<session_id>')
 def youtube_auth_setup(session_id):
-    """Show instructions for setting up YouTube OAuth"""
+    """Show instructions for setting up YouTube OAuth and handle the flow"""
     if session_id not in sessions:
         flash('Session expired or not found', 'error')
         return redirect(url_for('index'))
     
-    return render_template('youtube_auth_setup.html', session_id=session_id)
+    # Run the OAuth flow and store credentials in the session
+    credentials, result = get_youtube_credentials(
+        run_auth_flow=True, 
+        store_in_session=sessions[session_id]
+    )
+    
+    if result['success']:
+        flash('YouTube authorization successful! You can now create playlists.', 'success')
+        return redirect(url_for('search_youtube', session_id=session_id))
+    elif result.get('setup_required'):
+        # If client secrets file doesn't exist, show setup instructions
+        return render_template('youtube_auth_setup.html', 
+                           session_id=session_id, 
+                           missing_secrets=True)
+    else:
+        # If there was another error
+        flash(f'YouTube authorization failed: {result.get("error", "Unknown error")}', 'error')
+        return render_template('youtube_auth_setup.html', 
+                           session_id=session_id, 
+                           error=result.get("error", "Unknown error"))
 
 @app.route('/youtube_auth_callback')
 def youtube_auth_callback():

@@ -84,12 +84,16 @@ def create_zip_from_mp3s(folder_path):
 
 SCOPES = ['https://www.googleapis.com/auth/youtube']
 
-def get_youtube_credentials():
+def get_youtube_credentials(run_auth_flow=False, store_in_session=None):
     """
     Gets OAuth2 credentials for YouTube API.
     
+    Args:
+        run_auth_flow (bool): Whether to run the OAuth flow if no credentials exist
+        store_in_session (dict, optional): Session dict to store credentials in
+        
     Returns:
-        Credentials object for accessing YouTube API
+        tuple: (credentials, result_dict)
     """
     # Location to store credentials
     creds_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'credentials')
@@ -118,7 +122,7 @@ def get_youtube_credentials():
                 credentials = None
                 
         # If we still don't have valid credentials, need to go through OAuth flow
-        if not credentials:
+        if not credentials and run_auth_flow:
             # Path to client secrets file from Google Developer Console
             client_secrets_path = os.path.join(creds_dir, 'client_secrets.json')
             
@@ -129,22 +133,33 @@ def get_youtube_credentials():
                     "setup_required": True
                 }
                 
-            # Create the flow using client secrets file and required scopes
-            flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
-                client_secrets_path,
-                ['https://www.googleapis.com/auth/youtube']
-            )
-            
-            # Get the credentials by running the OAuth flow
-            credentials = flow.run_local_server(port=0)
-            
-            # Save the credentials for next time
-            with open(token_path, 'wb') as token:
-                pickle.dump(credentials, token)
+            try:
+                # Create the flow using client secrets file and required scopes
+                flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
+                    client_secrets_path,
+                    ['https://www.googleapis.com/auth/youtube']
+                )
+                
+                # Get the credentials by running the OAuth flow
+                credentials = flow.run_local_server(port=0)
+                
+                # Save the credentials for next time
+                with open(token_path, 'wb') as token:
+                    pickle.dump(credentials, token)
+                
+                # Store in session if requested
+                if store_in_session is not None:
+                    store_in_session['youtube_credentials'] = credentials
+                    
+            except Exception as e:
+                return None, {
+                    "success": False,
+                    "error": f"Authentication failed: {str(e)}"
+                }
                 
     return credentials, {"success": True}
 
-def create_youtube_playlist(video_ids, playlist_name, description=None):
+def create_youtube_playlist(video_ids, playlist_name, description=None, session_data=None):
     """
     Creates a YouTube playlist with the given videos.
     Uses OAuth2 to authenticate with the YouTube API.
@@ -153,15 +168,21 @@ def create_youtube_playlist(video_ids, playlist_name, description=None):
         video_ids (list): List of YouTube video IDs.
         playlist_name (str): Name for the playlist.
         description (str, optional): Description for the playlist.
+        session_data (dict, optional): Session data containing credentials
         
     Returns:
         dict: Result of creating the playlist.
     """
-    # Get credentials
-    credentials, creds_result = get_youtube_credentials()
-    
-    if not creds_result["success"]:
-        return creds_result
+    # Check if credentials are in the session
+    credentials = None
+    if session_data and 'youtube_credentials' in session_data:
+        credentials = session_data['youtube_credentials']
+        
+    # If not, get credentials from file
+    if not credentials:
+        credentials, creds_result = get_youtube_credentials()
+        if not creds_result["success"]:
+            return creds_result
     
     try:
         # Build the YouTube API client
